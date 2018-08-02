@@ -1,0 +1,318 @@
+// LimeWrite ver 1.0 by BouKiCHi
+// This software is provided under the BSD 2-Clause License.
+//
+//
+// LimeWrite Copyright (c) 2015, BouKiCHi
+// All rights reserved.
+// Redistribution and use in source and binary forms,
+// with or without modification, are permitted provided that
+// the following conditions are met:
+//
+// 1. Redistributions of source code must retain 
+// the above copyright notice, this list of conditions and 
+// the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce 
+// the above copyright notice, this list of conditions 
+// and the following disclaimer in the documentation 
+// and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS 
+// AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES 
+// OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
+// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, 
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+// EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+
+// プログラムの名前とメインウィンドウの非表示
+
+#packopt name "LimeWrite"
+#packopt hide 1
+
+#uselib "kernel32.dll"
+#cfunc 	GetPrivateProfileInt		"GetPrivateProfileIntA"		sptr, sptr, int, sptr
+#func 	GetPrivateProfileString 	"GetPrivateProfileStringA"	sptr, sptr, sptr, var, int, sptr
+#func	WritePrivateProfileString	"WritePrivateProfileStringA"	sptr, sptr, sptr, sptr
+
+#uselib "shell32.dll"
+#func DragAcceptFiles "DragAcceptFiles" int,int
+#func DragQueryFile   "DragQueryFileA"  int,int,int,int
+#func DragQueryPoint  "DragQueryPoint"  int,int
+#func DragFinish      "DragFinish"      int
+
+#define WM_DROPFILES    0x0233
+
+///// メイン
+
+	// タイトル
+	sProgName = "LimeWrite ver 1.0"
+
+	// 
+	appIni = dirinfo(1) + "\\limewrite.ini"
+	appName = "LimeWrite"
+
+	// サイズ
+	vWinW = 300
+	vWinH = 200
+	
+	// メインウィンドウ
+	screen 0, vWinW, vWinH
+	font "ＭＳ ゴシック", 12, 1
+	
+	// タイトル設定
+	title sProgName
+	
+	; WM_DROPFILES メッセージハンドラを設定
+	oncmd gosub *OnDropFiles, WM_DROPFILES
+	
+	; ファイルをドラッグ＆ドロップできるように設定
+	DragAcceptFiles hwnd, 1
+	
+	///// ファイル名
+	x = 10
+	y = 10
+	
+	sdim sFilename, 1024
+	sFilename = ""
+	argv = dirinfo(4)
+	if argv != "": sFilename = sFilename
+	
+	if peek(sFilename, ) = '"' : getstr sFilename, sFilename, 1, '"'
+	
+	// ラベル
+	pos x, y + 3
+	mes "FILE:"
+	x += 40
+	
+	// メッセージボックス
+	pos x, y
+	input sFilename, 200, 20, 0
+	vFileTextId = stat
+	
+	x += 205
+
+	pos x, y
+	objsize 40,20
+	button "..." , *Select
+	
+	///// 通信速度
+	x = 10
+	y += 25
+	
+	sBaud = "115200"
+	
+	// ラベル
+	pos x, y + 3
+	mes "BAUD:"
+	x += 40
+	
+	// メッセージボックス
+	pos x, y
+	input sBaud, 100, 20, 0
+	vBaudId = stat
+	
+	///// クロック
+	x = 10
+	y += 25
+	
+	sClock = "12000"
+	
+	// ラベル
+	pos x, y + 3
+	mes "CLOCK:"
+	x += 40
+	
+	// メッセージボックス
+	pos x, y
+	input sClock, 100, 20, 0
+	vClockId = stat
+
+	///// ポート
+	x = 10
+	y += 25
+	
+		
+	// ラベル
+	pos x, y + 3
+	mes "PORT:"
+	x += 40
+	
+	comx = x
+	comy = y
+	
+
+	vPortId = -1
+	// UI作成
+	gosub *S_MakeComUi
+	
+	
+	x += 105
+	
+	pos x, y
+	objsize 60,20
+	button "UPDATE" , *UpdateCom
+	
+	
+	///// 書き込みボタン
+	x = 10
+	y += 25
+
+	pos x, y
+	objsize 40,20
+	button "WRITE" , *Write
+	
+	///
+	if sFilename = "": gosub *S_LoadIni
+
+	
+	stop
+
+// ポートリスト作成
+*S_MakeComList
+	sdim combuf, 1024
+	combuf = ""
+	notesel combuf	
+	repeat 9
+		name = "COM" + strf("%d",cnt + 1)
+		exist name
+		// noteadd name
+		if strsize >= 0: noteadd name
+	loop
+	return	
+
+// COMポートUI作成
+*S_MakeComUI
+	// ラベル作成
+	gosub *S_MakeComList
+	if vPortId >= 0 {
+		objprm VPortId, combuf
+		vPortSel = 0
+		return
+	}
+	
+	vPortSel = 0
+
+	// コンボボックス
+	pos comx, comy
+	objsize 100, 20
+	combox vPortSel, 100, combuf
+	vPortId = stat
+	
+	return
+
+
+// 設定書き込み
+*S_SaveIni
+	appKey = "File"
+	WritePrivateProfileString appName, appKey, sFilename, appIni
+
+	return
+
+// 設定読み出し
+*S_LoadIni
+	appKey = "File"
+	defVal = "firm.bin"
+	buf = ""
+	GetPrivateProfileString appName, appKey, defVal, buf, 512, appIni
+
+	objprm vFileTextId, buf
+	
+	return
+
+
+// 選択
+*Select
+	// バイナリ
+	dialog "bin", 16, "ファームウェア"
+
+	// キャンセル
+	if stat = 0 {
+		stop
+	}
+	// 文字列変更
+	objprm vFileTextId, ""+refstr+""
+	
+	gosub *S_SaveIni
+	
+	stop
+
+
+// 通信ポート更新
+*UpdateCom
+	gosub *S_MakeComUI
+	stop
+
+
+// 書き込み
+*Write
+	gosub *S_SaveIni
+	
+	info = "File:" + sFilename + "\n"
+	info += "Baud:" + sBaud + "\n"
+	info += "Clock:" + sClock + "\n"
+	
+	notesel combuf
+	noteget sPortName, vPortSel
+	info += "Port:" + sPortName + "\n"
+	
+	if sPortName = "" {
+		dialog "COM port is not found!", 0, "Port"
+		stop
+	}
+
+
+	
+	// dialog info, 0, "info"
+	sdim cmdline, 1024
+	
+	cmdline = "cmd /c flash.bat -bin "
+	
+	/* outstr = ""
+	repeat strlen(sFilename)
+		ch = strmid(sFilename, cnt, 1)
+	
+		if ch == "\\" {
+			outstr += "\\\\"
+		} else {
+			outstr += ch
+		}
+	loop
+	*/
+		
+	// sFilename = "c:\\nlgplay.bin"
+	cmdline += "\"" + sFilename + "\""
+	cmdline += " " + sPortName
+	cmdline += " " + sBaud
+	cmdline += " " + sClock
+
+	// mes cmdline
+	// dialog cmdline, 0, "cmdline"
+	exec cmdline
+	stop
+
+// ドラッグ＆ドロップ機能のコードはサンプルより拝借
+*OnDropFiles
+	// ハンドル
+	hdrop = wParam 
+	DragQueryFile hdrop, -1, 0, 0
+	ndrop = stat             
+		
+	sdim filename, 260
+	DragQueryFile hdrop, 0, varptr(filename), 260
+	
+	objprm vFileTextId, filename
+	
+	// ドラッグ終了
+	DragFinish hdrop
+	
+	gosub *S_SaveIni
+return
